@@ -3,8 +3,8 @@
   "name": "Domain Mapper",
   "version": "1.0.0",
   "config_flow": true,
-  "documentation": "https://example.com",
+  "documentation": "https://github.com/lunDreame/domain-mapper",
   "dependencies": [],
-  "codeowners": ["@your-github"],
+  "codeowners": ["@lunDreame"],
   "requirements": []
 }
