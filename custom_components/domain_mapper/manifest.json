@@ -1,0 +1,10 @@
+{
+  "domain": "domain_mapper",
+  "name": "Domain Mapper",
+  "version": "1.0.0",
+  "config_flow": true,
+  "documentation": "https://example.com",
+  "dependencies": [],
+  "codeowners": ["@your-github"],
+  "requirements": []
+}
