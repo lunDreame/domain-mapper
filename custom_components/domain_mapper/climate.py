@@ -23,4 +23,4 @@ async def async_setup_entry(
 
     if coordinator.target_domain == Platform.CLIMATE.value:
         entity = ProxyClimateEntity(coordinator)
-        async_add_entities([entity], update_before_add=True)
+        async_add_entities([entity])

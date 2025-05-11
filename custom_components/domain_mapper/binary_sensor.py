@@ -23,4 +23,4 @@ async def async_setup_entry(
 
     if coordinator.target_domain == Platform.BINARY_SENSOR.value:
         entity = ProxyBinarySensor(coordinator)
-        async_add_entities([entity], update_before_add=True)
+        async_add_entities([entity])
