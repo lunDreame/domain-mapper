@@ -2,76 +2,74 @@
 Proxy entity for domain_mapper
 """
 
-from homeassistant.core import HomeAssistant, Event
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.const import (
+    STATE_ON,
+    STATE_OFF,
+    SERVICE_TURN_ON,
+    SERVICE_TURN_OFF,
+    CONF_FRIENDLY_NAME,
+    CONF_ENTITY_ID,
+    CONF_ATTRIBUTE,
+    ATTR_TEMPERATURE,
+    UnitOfTemperature,
+)
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.components.climate import ClimateEntity
-from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
-from homeassistant.components.water_heater.const import STATE_GAS
+from homeassistant.components.climate import ClimateEntity, PRESET_NONE, PRESET_AWAY
+from homeassistant.components.climate.const import (
+    HVACMode,
+    ClimateEntityFeature,
+    SERVICE_SET_TEMPERATURE,
+    SERVICE_SET_PRESET_MODE,
+    ATTR_PRESET_MODE,
+    ATTR_CURRENT_TEMPERATURE,
+    ATTR_MIN_TEMP,
+    ATTR_MAX_TEMP,
+)
+from homeassistant.components.water_heater import STATE_GAS, ATTR_AWAY_MODE
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.const import Platform, STATE_ON, STATE_OFF, UnitOfTemperature
 
-from .const import _LOGGER, DOMAIN
+from .const import (
+    _LOGGER,
+    DOMAIN,
+    CONF_SOURCE_ENTITY,
+    PROPERTY_DEVICE_CLASS,
+)
+from .coordinator import StateTrackingCoordinator
 from .helper import get_domain
 
-def create_proxy_entity(
-    hass: HomeAssistant, source_entity_id: str, target_domain: str
-):
-    if target_domain == Platform.CLIMATE:
-        return ProxyClimateEntity(hass, source_entity_id)
-    elif target_domain == Platform.BINARY_SENSOR:
-        return ProxyOccupancySensor(hass, source_entity_id)
-    return None
 
-
-class ProxyBaseEntity:
+class ProxyBaseEntity(Entity):
     """
     Base class for proxy entities
     """
 
-    def __init__(self, hass: HomeAssistant, source_entity_id: str) -> None:
-        self.hass = hass
-        self._source_entity_id = source_entity_id
-        self._unsub = None
+    def __init__(self, coordinator: StateTrackingCoordinator) -> None:
+        self._coordinator = coordinator
 
-    async def async_setup(self) -> None:
-        """
-        Register for state changes
-        """
-        _LOGGER.debug("Setting up proxy for: %s", self._source_entity_id)
-        self._unsub = async_track_state_change_event(
-            self.hass, [self._source_entity_id], self._handle_event
-        )
-
-    async def async_unload(self) -> None:
-        """
-        Unregister state listener
-        """
-        if self._unsub:
-            _LOGGER.debug("Unloading proxy for: %s", self._source_entity_id)
-            self._unsub()
-            self._unsub = None
-
-    async def _handle_event(self, event: Event) -> None:
-        self.async_write_ha_state()
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._coordinator.async_add_listener(self.async_write_ha_state)
 
     @property
     def should_poll(self) -> bool:
         return False
 
     @property
-    def snake_to_title_case(self) -> str:
-        # water_heater -> Water Heater
-        words = get_domain(self._source_entity_id).split('_')
-        return ' '.join(word.capitalize() for word in words)
+    def title_case(self) -> str:
+        """
+        water_heater -> Water Heater
+        """
+        domain = self._coordinator.source_domain.split('_')
+        return ' '.join(dom.capitalize() for dom in domain)
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, get_domain(self._source_entity_id))},
-            name=f"Map {self.snake_to_title_case}",
+            identifiers={(DOMAIN, self._coordinator.source_domain)},
+            name=self.title_case,
             manufacturer="DomainMapper",
-            model="Virtual Proxy Entity"
+            model="ProxyEntity",
         )
 
 
@@ -81,76 +79,131 @@ class ProxyClimateEntity(ProxyBaseEntity, ClimateEntity):
         STATE_OFF: HVACMode.OFF
     }
 
-    def __init__(self, hass: HomeAssistant, source_entity_id: str) -> None:
-        super().__init__(hass, source_entity_id)
+    def __init__(self, coordinator: StateTrackingCoordinator) -> None:
+        super().__init__(coordinator)
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
-        self._attr_hvac_mode = HVACMode.OFF
-        self._attr_supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE |
-            ClimateEntityFeature.TURN_OFF |
-            ClimateEntityFeature.TURN_ON
-        )
+        self._attr_preset_modes = [PRESET_NONE]
+        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features |= ClimateEntityFeature.TURN_ON
+        self._attr_supported_features |= ClimateEntityFeature.TURN_OFF
 
     @property
     def name(self) -> str:
-        return f"{get_domain(self._source_entity_id, 1)}"
+        return self._coordinator.entity_name or self._coordinator.data.attributes.get(CONF_FRIENDLY_NAME)
 
     @property
     def unique_id(self) -> str:
-        return f"{get_domain(self._source_entity_id, 1)}_cli"
+        return f"{DOMAIN}_{get_domain(self._coordinator.entity_id, 1)}"
+
+    @property
+    def supported_features(self) -> ClimateEntityFeature:
+        if self._coordinator.data.attributes.get(ATTR_AWAY_MODE) and PRESET_AWAY not in self._attr_preset_modes:
+            self._attr_preset_modes.append(PRESET_AWAY)
+            self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
+        return self._attr_supported_features
 
     @property
     def hvac_mode(self) -> HVACMode:
-        state = self.hass.states.get(self._source_entity_id).state
-        _LOGGER.debug("Source entity state: %s", state)
-        return self.HVAC_MODE_MAP.get(state)
+        return self.HVAC_MODE_MAP.get(self._coordinator.data.state, HVACMode.OFF)
+
+    @property
+    def preset_mode(self) -> str:
+        if self._coordinator.data.attributes.get(ATTR_AWAY_MODE) == STATE_ON:
+            return PRESET_AWAY
+        return PRESET_NONE
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        if hvac_mode == HVACMode.HEAT:
+            await self.hass.services.async_call(
+                self._coordinator.target_domain,
+                SERVICE_TURN_ON,
+                {CONF_ENTITY_ID: self._coordinator.entity_id},
+                blocking=True,
+            )
+        elif hvac_mode == HVACMode.OFF:
+            await self.hass.services.async_call(
+                self._coordinator.target_domain,
+                SERVICE_TURN_OFF,
+                {CONF_ENTITY_ID: self._coordinator.entity_id},
+                blocking=True,
+            )
+        await self._coordinator.async_request_refresh()
+
+    async def async_set_temperature(self, **kwargs) -> None:
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is not None:
+            await self.hass.services.async_call(
+                self._coordinator.target_domain,
+                SERVICE_SET_TEMPERATURE,
+                {
+                    CONF_ENTITY_ID: self._coordinator.entity_id,
+                    ATTR_TEMPERATURE: temperature
+                },
+                blocking=True
+            )
+            await self._coordinator.async_request_refresh()
+
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        await self.hass.services.async_call(
+            self._coordinator.target_domain,
+            SERVICE_SET_PRESET_MODE,
+            {
+                CONF_ENTITY_ID: self._coordinator.entity_id,
+                ATTR_PRESET_MODE: preset_mode
+            },
+            blocking=True
+        )
+        await self._coordinator.async_request_refresh()
 
     @property
     def target_temperature(self) -> float | None:
-        state = self.hass.states.get(self._source_entity_id)
-        return state.attributes.get("temperature")
+        return self._coordinator.data.attributes.get(ATTR_TEMPERATURE)
 
     @property
     def current_temperature(self) -> float | None:
-        state = self.hass.states.get(self._source_entity_id)
-        return state.attributes.get("current_temperature")
+        return self._coordinator.data.attributes.get(ATTR_CURRENT_TEMPERATURE)
+
+    @property
+    def min_temp(self) -> float | None:
+        return self._coordinator.data.attributes.get(ATTR_MIN_TEMP)
+
+    @property
+    def max_temp(self) -> float | None:
+        return self._coordinator.data.attributes.get(ATTR_MAX_TEMP)
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"source_entity": self._source_entity_id}
+        return {
+            CONF_SOURCE_ENTITY: self._coordinator.entity_id,
+            CONF_ATTRIBUTE: self._coordinator.data.attributes
+        }
 
-    @property
-    def icon(self) -> str:
-        return "mdi:thermostat"
 
+class ProxyBinarySensor(ProxyBaseEntity, BinarySensorEntity):
 
-class ProxyOccupancySensor(ProxyBaseEntity, BinarySensorEntity):
-
-    def __init__(self, hass: HomeAssistant, source_entity_id: str) -> None:
-        super().__init__(hass, source_entity_id)
+    def __init__(self, coordinator: StateTrackingCoordinator) -> None:
+        super().__init__(coordinator)
 
     @property
     def name(self) -> str:
-        return f"{get_domain(self._source_entity_id, 1)}"
+        return self._coordinator.entity_name or self._coordinator.data.attributes.get(CONF_FRIENDLY_NAME)
 
     @property
     def unique_id(self) -> str:
-        return f"{get_domain(self._source_entity_id, 1)}_occu"
+        return f"{DOMAIN}_{get_domain(self._coordinator.entity_id, 1)}"
 
     @property
     def is_on(self) -> bool:
-        state = self.hass.states.get(self._source_entity_id).state
-        return state == STATE_ON
+        return self._coordinator.data.state == STATE_ON
 
     @property
-    def device_class(self) -> str:
-        return "occupancy"
+    def device_class(self) -> str | None:
+        return self._coordinator.entry.data.get(PROPERTY_DEVICE_CLASS)
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"source_entity": self._source_entity_id}
-
-    @property
-    def icon(self) -> str:
-        return "mdi:motion-sensor"
+        return {
+            CONF_SOURCE_ENTITY: self._coordinator.entity_id,
+            CONF_ATTRIBUTE: self._coordinator.data.attributes
+        }

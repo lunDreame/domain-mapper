@@ -5,28 +5,23 @@
         "title": "Domain Mapper Setup",
         "description": "Map an entity from one domain to another",
         "data": {
-          "source_entity": "Source Entity",
+          "source_domain": "Source Domain"
+        }
+      },
+      "mappable_domain": {
+        "description": "Select a mappable domain",
+        "data": {
           "target_domain": "Target Domain"
         }
-      }
-    },
-    "error": {
-      "invalid_mapping": "Invalid source/target domain combination"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Domain Mapper Options",
-        "description": "Map an entity from one domain to another",
+      },
+      "select_source": {
+        "description": "Select the source entity and specify its property",
         "data": {
           "source_entity": "Source Entity",
-          "target_domain": "Target Domain"
+          "property_name": "Property Name",
+          "property_device_class": "Property Device Class"
         }
       }
-    },
-    "error": {
-      "invalid_mapping": "Invalid source/target domain combination"
     }
   }
 }

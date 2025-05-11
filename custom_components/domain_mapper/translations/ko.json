@@ -3,30 +3,25 @@
     "step": {
       "user": {
         "title": "도메인 매퍼 설정",
-        "description": "하나의 도메인에서 다른 도메인으로 엔티티를 매핑하세요",
+        "description": "엔티티를 하나의 도메인에서 다른 도메인으로 매핑합니다",
         "data": {
-          "source_entity": "원본 엔티티",
+          "source_domain": "원본 도메인"
+        }
+      },
+      "mappable_domain": {
+        "description": "매핑할 수 있는 도메인을 선택하세요",
+        "data": {
           "target_domain": "대상 도메인"
         }
-      }
-    },
-    "error": {
-      "invalid_mapping": "잘못된 원본/대상 도메인 조합입니다"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "도메인 매퍼 옵션",
-        "description": "하나의 도메인에서 다른 도메인으로 엔티티를 매핑하세요",
+      },
+      "select_source": {
+        "description": "원본 엔티티를 선택하고 속성을 지정하세요",
         "data": {
           "source_entity": "원본 엔티티",
-          "target_domain": "대상 도메인"
+          "property_name": "속성 이름",
+          "property_device_class": "속성 디바이스 클래스"
         }
       }
-    },
-    "error": {
-      "invalid_mapping": "잘못된 원본/대상 도메인 조합입니다"
     }
   }
 }
