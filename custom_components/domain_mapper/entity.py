@@ -3,30 +3,29 @@ Proxy entity for domain_mapper
 """
 
 from homeassistant.const import (
+    CONF_ATTRIBUTE,
+    CONF_ENTITY_ID,
+    CONF_FRIENDLY_NAME,
     STATE_ON,
     STATE_OFF,
+    ATTR_TEMPERATURE,
     SERVICE_TURN_ON,
     SERVICE_TURN_OFF,
-    CONF_FRIENDLY_NAME,
-    CONF_ENTITY_ID,
-    CONF_ATTRIBUTE,
-    ATTR_TEMPERATURE,
     UnitOfTemperature,
 )
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.components.climate import ClimateEntity, PRESET_NONE, PRESET_AWAY
-from homeassistant.components.climate.const import (
-    HVACMode,
-    ClimateEntityFeature,
+from homeassistant.components.climate.const import HVACMode, ClimateEntityFeature
+from homeassistant.components.water_heater import (
+    SERVICE_SET_AWAY_MODE,
     SERVICE_SET_TEMPERATURE,
-    SERVICE_SET_PRESET_MODE,
-    ATTR_PRESET_MODE,
-    ATTR_CURRENT_TEMPERATURE,
-    ATTR_MIN_TEMP,
+    STATE_GAS,
     ATTR_MAX_TEMP,
+    ATTR_MIN_TEMP,
+    ATTR_AWAY_MODE,
+    ATTR_CURRENT_TEMPERATURE,
 )
-from homeassistant.components.water_heater import STATE_GAS, ATTR_AWAY_MODE
 from homeassistant.components.binary_sensor import BinarySensorEntity
 
 from .const import (
@@ -116,14 +115,14 @@ class ProxyClimateEntity(ProxyBaseEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode == HVACMode.HEAT:
             await self.hass.services.async_call(
-                self._coordinator.target_domain,
+                self._coordinator.source_domain,
                 SERVICE_TURN_ON,
                 {CONF_ENTITY_ID: self._coordinator.entity_id},
                 blocking=True,
             )
         elif hvac_mode == HVACMode.OFF:
             await self.hass.services.async_call(
-                self._coordinator.target_domain,
+                self._coordinator.source_domain,
                 SERVICE_TURN_OFF,
                 {CONF_ENTITY_ID: self._coordinator.entity_id},
                 blocking=True,
@@ -134,7 +133,7 @@ class ProxyClimateEntity(ProxyBaseEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is not None:
             await self.hass.services.async_call(
-                self._coordinator.target_domain,
+                self._coordinator.source_domain,
                 SERVICE_SET_TEMPERATURE,
                 {
                     CONF_ENTITY_ID: self._coordinator.entity_id,
@@ -145,15 +144,26 @@ class ProxyClimateEntity(ProxyBaseEntity, ClimateEntity):
             await self._coordinator.async_request_refresh()
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        await self.hass.services.async_call(
-            self._coordinator.target_domain,
-            SERVICE_SET_PRESET_MODE,
-            {
-                CONF_ENTITY_ID: self._coordinator.entity_id,
-                ATTR_PRESET_MODE: preset_mode
-            },
-            blocking=True
-        )
+        if preset_mode == PRESET_AWAY:
+            await self.hass.services.async_call(
+                self._coordinator.source_domain,
+                SERVICE_SET_AWAY_MODE,
+                {
+                    CONF_ENTITY_ID: self._coordinator.entity_id,
+                    ATTR_AWAY_MODE: True
+                },
+                blocking=True
+            )
+        else:
+            await self.hass.services.async_call(
+                self._coordinator.source_domain,
+                SERVICE_SET_AWAY_MODE,
+                {
+                    CONF_ENTITY_ID: self._coordinator.entity_id,
+                    ATTR_AWAY_MODE: False
+                },
+                blocking=True
+            )
         await self._coordinator.async_request_refresh()
 
     @property
